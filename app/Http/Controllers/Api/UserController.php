@@ -154,6 +154,10 @@ class UserController extends Controller
 
     /**
      * Determine if the current user can edit the given user.
+     * Rules for can_edit:
+     * - Administrator: Can edit any user.
+     * - Manager: Can only edit users with the role user.
+     * - User: Can only edit themselves
      */
     protected function canEdit($currentUser, $user)
     {

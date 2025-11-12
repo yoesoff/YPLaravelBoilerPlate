@@ -13,13 +13,17 @@ class UserSeeder extends Seeder
         $roles = ['Administrator', 'Manager', 'User'];
         foreach ($roles as $role) {
             for ($i = 1; $i <= 3; $i++) {
-                User::create([
-                    'name' => "{$role} {$i}",
-                    'email' => strtolower($role) . "{$i}@example.com",
-                    'password' => Hash::make('password123'),
-                    'role' => $role,
-                    'active' => true,
-                ]);
+                $email = strtolower($role) . "{$i}@example.com";
+                // database/seeders/UserSeeder.php
+                if (!User::where('email', $email)->exists()) {
+                    User::create([
+                        'name' => 'Test ' . $role . ' User' . $i,
+                        'email' => $email,
+                        'password' => Hash::make('password123'),
+                        'role' => $role,
+                        'active' => true,
+                    ]);
+                }
             }
         }
     }
