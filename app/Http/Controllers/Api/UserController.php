@@ -113,7 +113,7 @@ class UserController extends Controller
             ]);
         } catch (Exception $e) {
             Log::error('Failed to retrieve user list', ['error' => $e->getMessage()]);
-            return response()->json(['error' => 'Failed to retrieve user list'], 500);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -150,6 +150,31 @@ class UserController extends Controller
             Log::error('User update failed', ['error' => $e->getMessage()]);
             return response()->json(['error' => $e->getMessage()], 403);
         }
+    }
+
+    public function view($id)
+    {
+        try {
+            $user = User::findOrFail($id);
+
+            return response()->json([
+                'id' => $user->id,
+                'email' => $user->email,
+                'name' => $user->name,
+                'role' => strtolower($user->role),
+                'active' => $user->active,
+                'created_at' => $user->created_at->toIso8601String(),
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'User not found'], 404);
+        } catch (Exception $e) {
+            return response()->json(['error' => 'Failed to retrieve user'], 500);
+        }
+    }
+
+    public function hello()
+    {
+        return "Hello, World!";
     }
 
     /**
