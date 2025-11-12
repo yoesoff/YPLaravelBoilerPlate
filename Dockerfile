@@ -1,6 +1,9 @@
 FROM php:8.2-fpm
 
-RUN apt-get update && apt-get install -y unzip git libpq-dev
+RUN apt-get update \
+    && apt-get install -y unzip git libpq-dev netcat-openbsd \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN docker-php-ext-install pdo pdo_pgsql
 

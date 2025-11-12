@@ -11,7 +11,7 @@ services:
       - yplaravelboilerplate_network
     depends_on:
       - yplaravelboilerplate_db
-    command: sh -c "php artisan migrate && php-fpm"
+    command: sh -c "until nc -z yplaravelboilerplate_db 5432; do sleep 1; done; php artisan migrate && php-fpm"
 
   yplaravelboilerplate_webserver:
     image: nginx:alpine
@@ -36,12 +36,12 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - yplaravelboilerplate_db_data:/var/lib/postgresql/data
     networks:
       - yplaravelboilerplate_network
 
 volumes:
-  db_data:
+  yplaravelboilerplate_db_data:
 
 networks:
   yplaravelboilerplate_network:
