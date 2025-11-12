@@ -62,7 +62,7 @@ class UserController extends Controller
 
         } catch (Exception $e) {
             Log::error('User creation failed', ['error' => $e->getMessage()]);
-            return response()->json(['error' => 'User creation failed'], 400);
+            return response()->json(['error' => $e->getMessage()], 400);
         }
     }
 
