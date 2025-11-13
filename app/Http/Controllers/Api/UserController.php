@@ -3,23 +3,25 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\UpdateUserRequest;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
+use App\Http\Requests\CreateUserRequest;
 
 class UserController extends Controller
 {
     /**
      * Create a new user.
      */
-    public function create(Request $request)
+    public function create(CreateUserRequest $request)
     {
         $currentUser = auth()->user();
 
-        // Authorization: only Administrator or Manager
         if (!$currentUser || !in_array($currentUser->role, ['Administrator', 'Manager'])) {
             return response()->json([
                 'error' => 'forbidden',
@@ -27,53 +29,67 @@ class UserController extends Controller
             ], 403);
         }
 
+        // Extra guard (handles race conditions beyond validation)
+        $validated = $request->validated();
+        if (User::where('email', $validated['email'])->exists()) {
+            return response()->json([
+                'error' => 'email_exists',
+                'message' => 'A user with this email already exists.'
+            ], 409);
+        }
+
         try {
-            $validated = $request->validate([
-                'email' => 'required|email|unique:users,email',
-                'password' => 'required|string|min:8',
-                'name' => 'required|string|min:3|max:50',
-            ]);
+            $validated = $request->validated();
 
             $user = User::create([
                 'email' => $validated['email'],
                 'password' => bcrypt($validated['password']),
                 'name' => $validated['name'],
             ]);
-
-            Log::info('User created', ['user_id' => $user->id, 'email' => $user->email]);
-
-            // Send confirmation email to user
-            try {
-                Mail::raw('Your account has been created.', function ($message) use ($user) {
-                    $message->to($user->email)->subject('Account Created');
-                });
-                Log::info('Confirmation email sent', ['user_id' => $user->id]);
-            } catch (Exception $e) {
-                Log::error('Failed to send confirmation email', ['error' => $e->getMessage()]);
-            }
-
-            // Send notification email to admin
-            $adminEmail = config('mail.admin_address', 'admin@example.com');
-            try {
-                Mail::raw("A new user has registered: {$user->email}", function ($message) use ($adminEmail) {
-                    $message->to($adminEmail)->subject('New User Registered');
-                });
-                Log::info('Admin notification email sent', ['admin_email' => $adminEmail]);
-            } catch (Exception $e) {
-                Log::error('Failed to send admin notification email', ['error' => $e->getMessage()]);
-            }
-
-            return response()->json([
-                'id' => $user->id,
-                'email' => $user->email,
-                'name' => $user->name,
-                'created_at' => $user->created_at->toIso8601String(),
-            ], 201);
-
         } catch (Exception $e) {
             Log::error('User creation failed', ['error' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 400);
+            return response()->json([
+                'error' => 'user_creation_failed',
+                'message' => 'Failed to create user.',
+                'detail' => $e->getMessage()
+            ], 500);
         }
+
+        try {
+            Mail::raw('Your account has been created.', function ($message) use ($user) {
+                $message->to($user->email)->subject('Account Created');
+            });
+        } catch (Exception $e) {
+            Log::error('User welcome email failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'welcome_email_failed',
+                'message' => 'User created but failed to send welcome email.',
+                'user_id' => $user->id
+            ], 500);
+        }
+
+        try {
+            $adminEmail = config('mail.admin_address', 'admin@example.com');
+            Mail::raw("A new user has registered: {$user->email}", function ($message) use ($adminEmail) {
+                $message->to($adminEmail)->subject('New User Registered');
+            });
+        } catch (Exception $e) {
+            Log::error('Admin notification email failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'admin_notification_failed',
+                'message' => 'User created, welcome email sent, but admin notification failed.',
+                'user_id' => $user->id
+            ], 500);
+        }
+
+        Log::info('User created', ['user_id' => $user->id, 'email' => $user->email]);
+
+        return response()->json([
+            'id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name,
+            'created_at' => $user->created_at->toIso8601String(),
+        ], 201);
     }
 
     /**
@@ -127,26 +143,38 @@ class UserController extends Controller
         }
     }
 
-    public function update(Request $request, $id)
+    public function update(UpdateUserRequest $request, $id)
     {
         try {
             $user = User::findOrFail($id);
             $currentUser = auth()->user();
 
             if (!$this->canEdit($currentUser, $user)) {
-                throw new \Exception('You do not have permission to edit this user.');
+                return response()->json([
+                    'error' => 'forbidden',
+                    'message' => 'You do not have permission to edit this user.'
+                ], 403);
             }
 
-            $validated = $request->validate([
-                'name' => 'sometimes|string|min:3|max:50',
-                'email' => 'sometimes|email|unique:users,email,' . $user->id,
-                'role' => 'sometimes|in:Administrator,Manager,User',
-                'active' => 'sometimes|boolean',
-            ]);
+            $data = $request->validated();
 
-            $user->update($validated);
+            try {
+                $user->update($data);
+            } catch (QueryException $e) {
+                if ($e->getCode() === '23000') {
+                    return response()->json([
+                        'error' => 'email_exists',
+                        'message' => 'A user with this email already exists.'
+                    ], 409);
+                }
+                Log::error('User update query error', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+                return response()->json([
+                    'error' => 'update_failed',
+                    'message' => 'Failed to update user.'
+                ], 500);
+            }
 
-            Log::info('User updated', ['user_id' => $user->id, 'editor_id' => $currentUser->id]);
+            Log::info('User updated', ['user_id' => $user->id, 'editor_id' => $currentUser?->id]);
 
             return response()->json([
                 'id' => $user->id,
@@ -156,9 +184,11 @@ class UserController extends Controller
                 'active' => $user->active,
                 'created_at' => $user->created_at->toIso8601String(),
             ]);
-        } catch (\Exception $e) {
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['error' => 'not_found', 'message' => 'User not found'], 404);
+        } catch (Exception $e) {
             Log::error('User update failed', ['error' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 403);
+            return response()->json(['error' => 'update_failed', 'message' => $e->getMessage()], 500);
         }
     }
 
