@@ -17,6 +17,16 @@ class UserController extends Controller
      */
     public function create(Request $request)
     {
+        $currentUser = auth()->user();
+
+        // Authorization: only Administrator or Manager
+        if (!$currentUser || !in_array($currentUser->role, ['Administrator', 'Manager'])) {
+            return response()->json([
+                'error' => 'forbidden',
+                'message' => 'You do not have permission to create users.'
+            ], 403);
+        }
+
         try {
             $validated = $request->validate([
                 'email' => 'required|email|unique:users,email',
