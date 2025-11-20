@@ -11,7 +11,12 @@ services:
       - yplaravelboilerplate_network
     depends_on:
       - yplaravelboilerplate_db
-    command: sh -c "until nc -z yplaravelboilerplate_db 5432; do sleep 1; done; php artisan migrate && php artisan db:seed && php-fpm"
+    command: >
+      sh -c "until nc -z yplaravelboilerplate_db 5432; do sleep 1; done;
+             composer install --no-interaction --prefer-dist --optimize-autoloader &&
+             php artisan migrate --force &&
+             php artisan db:seed --force &&
+             php-fpm"
 
   yplaravelboilerplate_webserver:
     image: nginx:alpine
