@@ -1,9 +1,3 @@
-That's a **well-structured and detailed `README.md`** for a Laravel boilerplate\!
-
-As requested, I will integrate the Postman collection link into the `Sample Endpoints` section to make it easier for users to test your API. I will also make a minor adjustment to the `Architecture` section to visually highlight the key SOLID principles and layers.
-
-Here is the revised `README.md` with the Postman collection link and improved formatting:
-
 ````markdown
 # YPLaravelBoilerPlate
 
